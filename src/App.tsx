@@ -3,6 +3,8 @@ import './styles.css';
 import { defaultLetter, moments } from './data';
 import { photos } from './photos';
 import { isGateOpen, openGate, resetGate } from './gate';
+import { puzzle } from './puzzle';
+import { isPuzzleOpen, openPuzzle, resetPuzzle } from './puzzleGate';
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -33,9 +35,20 @@ export default function App() {
   const [gateCode, setGateCode] = useState('');
   const [gateError, setGateError] = useState('');
 
-  const [tab, setTab] = useState<'timeline' | 'gallery' | 'letter'>('timeline');
+  const [tab, setTab] = useState<'timeline' | 'gallery' | 'letter' | 'escape'>('timeline');
   const [idx, setIdx] = useState(0);
   const [lightbox, setLightbox] = useState<number | null>(null);
+
+  const [puzzleOk, setPuzzleOk] = useState(() => {
+    try {
+      return isPuzzleOpen();
+    } catch {
+      return false;
+    }
+  });
+  const [puzzleCode, setPuzzleCode] = useState('');
+  const [puzzleError, setPuzzleError] = useState('');
+  const [clueOpen, setClueOpen] = useState<Record<string, boolean>>({});
 
   const [letter, setLetter] = useState(() => {
     const saved = localStorage.getItem('val_letter');
@@ -172,6 +185,23 @@ export default function App() {
     }
   };
 
+  const submitPuzzle = () => {
+    const cleaned = String(puzzleCode || '').replace(/\D/g, '').slice(0, puzzle.slots);
+    try {
+      const ok = openPuzzle(cleaned, puzzle.solution);
+      if (!ok) {
+        setPuzzleError('不对，再检查一下线索顺序。');
+        return;
+      }
+      setPuzzleError('');
+      setPuzzleOk(true);
+      setTab('letter');
+      setRevealed(true);
+    } catch {
+      setPuzzleError('无法验证（浏览器禁用了本地存储）');
+    }
+  };
+
   if (!gateOk) {
     return (
       <div className="vApp">
@@ -231,6 +261,7 @@ export default function App() {
         <nav className="vTabs" aria-label="tabs">
           <button className={`vTab ${tab === 'timeline' ? 'vTabActive' : ''}`} onClick={() => setTab('timeline')}>时间线</button>
           <button className={`vTab ${tab === 'gallery' ? 'vTabActive' : ''}`} onClick={() => setTab('gallery')}>照片墙</button>
+          <button className={`vTab ${tab === 'escape' ? 'vTabActive' : ''}`} onClick={() => setTab('escape')}>密室</button>
           <button className={`vTab ${tab === 'letter' ? 'vTabActive' : ''}`} onClick={() => { setTab('letter'); setRevealed(true); }}>情书</button>
         </nav>
 
@@ -368,6 +399,77 @@ export default function App() {
                     {p.caption ? <div className="vShotCap">{p.caption}</div> : null}
                   </div>
                 ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {tab === 'escape' ? (
+          <section className="vCard">
+            <div className="vCardInner vPuzzle">
+              <h2 className="vPuzzleTitle">{puzzle.title}</h2>
+              <p className="vPuzzleIntro">{puzzle.intro}</p>
+              <p className="vSmall">目标：{puzzle.goal}</p>
+
+              <div className="vClueList">
+                {puzzle.clues.map((c) => {
+                  const open = !!clueOpen[c.id];
+                  return (
+                    <div key={c.id} className="vClue">
+                      <div
+                        className="vClueHead"
+                        onClick={() => setClueOpen((m) => ({ ...m, [c.id]: !m[c.id] }))}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 99, background: open ? 'var(--accent2)' : 'var(--accent)', display: 'inline-block' }} />
+                          <span style={{ color: 'var(--ink)' }}>{c.title}</span>
+                        </span>
+                        <span>{open ? '收起' : '展开'}</span>
+                      </div>
+                      {open ? (
+                        <div className="vClueBody">
+                          <div>{c.hint}</div>
+                          <div className="vQuote" style={{ marginTop: 10 }}>{c.reveal}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="vCodeRow">
+                <input
+                  className="vCodeInput"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={puzzle.slots}
+                  placeholder={`${puzzle.slots} 位数字`}
+                  value={puzzleCode}
+                  onChange={(e) => {
+                    setPuzzleCode(e.target.value.replace(/\D/g, '').slice(0, puzzle.slots));
+                    setPuzzleError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitPuzzle();
+                  }}
+                />
+                <button className="vBtn vBtnPrimary" onClick={submitPuzzle}>开门</button>
+                <button className="vBtn" onClick={() => { resetPuzzle(); setPuzzleOk(false); setPuzzleCode(''); setPuzzleError(''); }}>重置</button>
+              </div>
+
+              {puzzleError ? <div className="vGateError">{puzzleError}</div> : null}
+
+              {puzzleOk ? (
+                <div className="vSuccess">
+                  <div className="vSuccessTitle">{puzzle.successTitle}</div>
+                  <div className="vSuccessText">{puzzle.successText}</div>
+                </div>
+              ) : null}
+
+              <div className="vSmall" style={{ marginTop: 12 }}>
+                说明：这个谜题是“轻量密室”，线索都在本页面里；后面我可以把线索改成更私密、更像你们的梗。
               </div>
             </div>
           </section>
