@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
 import { defaultLetter, moments } from './data';
+import { photos } from './photos';
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -21,7 +22,10 @@ function useIsMobile() {
 export default function App() {
   const isMobile = useIsMobile();
 
+  const [tab, setTab] = useState<'timeline' | 'gallery' | 'letter'>('timeline');
   const [idx, setIdx] = useState(0);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+
   const [letter, setLetter] = useState(() => {
     const saved = localStorage.getItem('val_letter');
     return saved ?? defaultLetter;
@@ -60,6 +64,7 @@ export default function App() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (tab !== 'timeline') return;
       const t = e.touches[0];
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
@@ -71,6 +76,7 @@ export default function App() {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      if (tab !== 'timeline') return;
       if (!moved) return;
       const t = e.changedTouches[0];
       const dx = t.clientX - startX;
@@ -87,7 +93,7 @@ export default function App() {
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
     };
-  }, [total]);
+  }, [total, tab]);
 
   const copyShareText = async () => {
     const share = [
@@ -130,13 +136,24 @@ export default function App() {
     w.print();
   };
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null);
+      if (lightbox == null) return;
+      if (e.key === 'ArrowLeft') setLightbox((v) => (v == null ? v : clamp(v - 1, 0, photos.length - 1)));
+      if (e.key === 'ArrowRight') setLightbox((v) => (v == null ? v : clamp(v + 1, 0, photos.length - 1)));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
+
   return (
     <div className="vApp">
       <div className="vShell">
         <header className="vTop">
           <div>
             <h1 className="vTitle">8 年，仍然选择你</h1>
-            <p className="vSubtitle">timeline + letter • swipe / arrows • 保存于本机</p>
+            <p className="vSubtitle">timeline + gallery + letter • 保存于本机</p>
           </div>
 
           <div className="vPills">
@@ -146,122 +163,199 @@ export default function App() {
           </div>
         </header>
 
-        <main className="vGrid">
-          <section className="vCard">
-            <div className="vCardInner">
-              <div className="vTimelineHeader">
-                <h2>我们的时间线</h2>
-                <div className="vNav">
-                  <button className="vBtn" onClick={() => setIdx((v) => clamp(v - 1, 0, total - 1))} disabled={idx === 0}>
-                    ← 上一页
-                  </button>
-                  <button className="vBtn" onClick={() => setIdx((v) => clamp(v + 1, 0, total - 1))} disabled={idx === total - 1}>
-                    下一页 →
-                  </button>
+        <nav className="vTabs" aria-label="tabs">
+          <button className={`vTab ${tab === 'timeline' ? 'vTabActive' : ''}`} onClick={() => setTab('timeline')}>时间线</button>
+          <button className={`vTab ${tab === 'gallery' ? 'vTabActive' : ''}`} onClick={() => setTab('gallery')}>照片墙</button>
+          <button className={`vTab ${tab === 'letter' ? 'vTabActive' : ''}`} onClick={() => { setTab('letter'); setRevealed(true); }}>情书</button>
+        </nav>
+
+        {tab === 'timeline' ? (
+          <main className="vGrid">
+            <section className="vCard">
+              <div className="vCardInner">
+                <div className="vTimelineHeader">
+                  <h2>我们的时间线</h2>
+                  <div className="vNav">
+                    <button className="vBtn" onClick={() => setIdx((v) => clamp(v - 1, 0, total - 1))} disabled={idx === 0}>
+                      ← 上一页
+                    </button>
+                    <button className="vBtn" onClick={() => setIdx((v) => clamp(v + 1, 0, total - 1))} disabled={idx === total - 1}>
+                      下一页 →
+                    </button>
+                  </div>
+                </div>
+
+                <div className="vDeck" ref={deckRef} aria-label="timeline deck">
+                  <article className="vSlide" style={{ outlineColor: accent }}>
+                    <div className="vSlideMedia">
+                      <span className="vTag">
+                        <b>{active.title}</b>
+                        <span style={{ width: 8, height: 8, borderRadius: 99, background: accent, display: 'inline-block' }} />
+                        <span>{active.place ?? '—'}</span>
+                      </span>
+                      <span className="vYear">{active.yearLabel} • {idx + 1}/{total}</span>
+                    </div>
+
+                    <div className="vSlideBody">
+                      <h3 className="vSlideTitle">{active.title}</h3>
+                      <p className="vSlideText">{active.text}</p>
+                      {active.quote ? <div className="vQuote">{active.quote}</div> : null}
+
+                      <div className="vActions">
+                        <button className="vBtn vBtnGhost" onClick={copyShareText}>复制这一页文案</button>
+                        <button className="vBtn vBtnGhost" onClick={() => { setRevealed(true); setTab('letter'); }}>
+                          {revealed ? '去看情书' : '解锁情书'}
+                        </button>
+                      </div>
+
+                      <div className="vDots" aria-label="dots">
+                        {moments.map((m, i) => (
+                          <span
+                            key={m.id}
+                            className={`vDot ${i === idx ? 'vDotActive' : ''}`}
+                            onClick={() => setIdx(i)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter') setIdx(i); }}
+                            aria-label={`go ${i + 1}`}
+                            style={i === idx ? { background: accent } : undefined}
+                          />
+                        ))}
+                      </div>
+
+                      <p className="vSmall">提示：手机左右滑动；也可以点小圆点跳转。</p>
+                    </div>
+                  </article>
                 </div>
               </div>
+            </section>
 
-              <div className="vDeck" ref={deckRef} aria-label="timeline deck">
-                <article className="vSlide" style={{ outlineColor: accent }}>
-                  <div className="vSlideMedia">
-                    <span className="vTag">
-                      <b>{active.title}</b>
-                      <span style={{ width: 8, height: 8, borderRadius: 99, background: accent, display: 'inline-block' }} />
-                      <span>{active.place ?? '—'}</span>
-                    </span>
-                    <span className="vYear">{active.yearLabel} • {idx + 1}/{total}</span>
+            <aside className="vRight">
+              <section className="vCard vLetter">
+                <div className="vLetterHead">
+                  <div>
+                    <h2>一封信</h2>
+                    <div className="vSmall">你可以先写好；到时候只给她看最终页面。</div>
                   </div>
+                  <div className="vLetterMeta">
+                    <div>本地保存</div>
+                    <div>不上传到服务器</div>
+                  </div>
+                </div>
 
-                  <div className="vSlideBody">
-                    <h3 className="vSlideTitle">{active.title}</h3>
-                    <p className="vSlideText">{active.text}</p>
-                    {active.quote ? <div className="vQuote">{active.quote}</div> : null}
-
+                {revealed ? (
+                  <>
+                    <textarea
+                      className="vTextarea"
+                      value={letter}
+                      onChange={(e) => setLetter(e.target.value)}
+                      spellCheck={false}
+                    />
                     <div className="vActions">
-                      <button className="vBtn vBtnGhost" onClick={copyShareText}>复制这一页文案</button>
-                      <button className="vBtn vBtnGhost" onClick={() => setRevealed(true)}>
-                        {revealed ? '情书已解锁' : '解锁情书'}
+                      <button className="vBtn vBtnPrimary" onClick={printLetter}>打印 / 保存 PDF</button>
+                      <button className="vBtn" onClick={() => { setLetter(defaultLetter); }}>
+                        重置为模板
+                      </button>
+                      <button className="vBtn" onClick={() => { localStorage.removeItem('val_letter'); localStorage.removeItem('val_revealed'); setLetter(defaultLetter); setRevealed(false); }}>
+                        清空本机记录
                       </button>
                     </div>
-
-                    <div className="vDots" aria-label="dots">
-                      {moments.map((m, i) => (
-                        <span
-                          key={m.id}
-                          className={`vDot ${i === idx ? 'vDotActive' : ''}`}
-                          onClick={() => setIdx(i)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => { if (e.key === 'Enter') setIdx(i); }}
-                          aria-label={`go ${i + 1}`}
-                          style={i === idx ? { background: accent } : undefined}
-                        />
-                      ))}
+                  </>
+                ) : (
+                  <>
+                    <div className="vCardInner" style={{ padding: 0 }}>
+                      <div style={{ padding: 16, color: 'var(--muted)', lineHeight: 1.7 }}>
+                        这封信默认是“锁住”的。你可以在时间线里点「解锁情书」，或者直接点下面按钮。
+                      </div>
+                      <div className="vActions" style={{ padding: '0 16px 16px' }}>
+                        <button className="vBtn vBtnPrimary" onClick={() => setRevealed(true)}>现在解锁</button>
+                      </div>
                     </div>
+                  </>
+                )}
+              </section>
 
-                    <p className="vSmall">提示：手机左右滑动；也可以点小圆点跳转。</p>
+              <section className="vCard">
+                <div className="vCardInner">
+                  <h2 style={{ margin: 0, fontSize: 16 }}>快速改内容</h2>
+                  <p className="vSlideText" style={{ marginTop: 8 }}>
+                    你只需要编辑 <span style={{ fontFamily: 'var(--mono)' }}>src/data.ts</span> 里每张卡片的标题、地点和文字，替换成你们真实的故事。
+                  </p>
+                  <p className="vSmall">如果你给我 6-10 个真实瞬间关键词，我可以帮你直接把时间线文案写得更贴脸。</p>
+                </div>
+              </section>
+            </aside>
+          </main>
+        ) : null}
+
+        {tab === 'gallery' ? (
+          <section className="vCard">
+            <div className="vCardInner">
+              <div className="vGalleryHeader">
+                <h2>照片墙</h2>
+                <div className="vSmall">点击放大；方向键切换；ESC 关闭。</div>
+              </div>
+
+              <div className="vMasonry" aria-label="gallery">
+                {photos.map((p, i) => (
+                  <div key={p.src} className="vShot" onClick={() => setLightbox(i)} role="button" tabIndex={0}>
+                    <img src={p.src} alt={p.alt} loading="lazy" />
+                    {p.caption ? <div className="vShotCap">{p.caption}</div> : null}
                   </div>
-                </article>
+                ))}
               </div>
             </div>
           </section>
+        ) : null}
 
-          <aside className="vRight">
-            <section className="vCard vLetter">
+        {tab === 'letter' ? (
+          <section className="vCard vLetter">
+            <div className="vCardInner">
               <div className="vLetterHead">
                 <div>
                   <h2>一封信</h2>
-                  <div className="vSmall">你可以先写好；到时候只给她看最终页面。</div>
+                  <div className="vSmall">建议你先写好，然后把链接发给她。</div>
                 </div>
                 <div className="vLetterMeta">
                   <div>本地保存</div>
                   <div>不上传到服务器</div>
                 </div>
               </div>
-
-              {revealed ? (
-                <>
-                  <textarea
-                    className="vTextarea"
-                    value={letter}
-                    onChange={(e) => setLetter(e.target.value)}
-                    spellCheck={false}
-                  />
-                  <div className="vActions">
-                    <button className="vBtn vBtnPrimary" onClick={printLetter}>打印 / 保存 PDF</button>
-                    <button className="vBtn" onClick={() => { setLetter(defaultLetter); }}>
-                      重置为模板
-                    </button>
-                    <button className="vBtn" onClick={() => { localStorage.removeItem('val_letter'); localStorage.removeItem('val_revealed'); setLetter(defaultLetter); setRevealed(false); }}>
-                      清空本机记录
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="vCardInner" style={{ padding: 0 }}>
-                    <div style={{ padding: 16, color: 'var(--muted)', lineHeight: 1.7 }}>
-                      这封信默认是“锁住”的。你可以在时间线里点「解锁情书」，或者直接点下面按钮。
-                    </div>
-                    <div className="vActions" style={{ padding: '0 16px 16px' }}>
-                      <button className="vBtn vBtnPrimary" onClick={() => setRevealed(true)}>现在解锁</button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </section>
-
-            <section className="vCard">
-              <div className="vCardInner">
-                <h2 style={{ margin: 0, fontSize: 16 }}>快速改内容</h2>
-                <p className="vSlideText" style={{ marginTop: 8 }}>
-                  你只需要编辑 <span style={{ fontFamily: 'var(--mono)' }}>src/data.ts</span> 里每张卡片的标题、地点和文字，替换成你们真实的故事。
-                </p>
-                <p className="vSmall">如果你给我 6-10 个真实瞬间关键词，我可以帮你直接把时间线文案写得更贴脸。</p>
+              <textarea
+                className="vTextarea"
+                value={letter}
+                onChange={(e) => setLetter(e.target.value)}
+                spellCheck={false}
+              />
+              <div className="vActions">
+                <button className="vBtn vBtnPrimary" onClick={printLetter}>打印 / 保存 PDF</button>
+                <button className="vBtn" onClick={() => { setLetter(defaultLetter); }}>重置为模板</button>
               </div>
-            </section>
-          </aside>
-        </main>
+            </div>
+          </section>
+        ) : null}
+
+        {lightbox != null ? (
+          <div className="vLightbox" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
+            <div className="vLightboxInner" onClick={(e) => e.stopPropagation()}>
+              <img className="vLightboxImg" src={photos[lightbox].src} alt={photos[lightbox].alt} />
+              <div className="vLightboxBar">
+                <button className="vIconBtn" onClick={() => setLightbox((v) => (v == null ? v : clamp(v - 1, 0, photos.length - 1)))} disabled={lightbox === 0}>
+                  ←
+                </button>
+                <span>
+                  {photos[lightbox].caption ?? '照片'} • {lightbox + 1}/{photos.length}
+                </span>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="vIconBtn" onClick={() => setLightbox((v) => (v == null ? v : clamp(v + 1, 0, photos.length - 1)))} disabled={lightbox === photos.length - 1}>
+                    →
+                  </button>
+                  <button className="vIconBtn" onClick={() => setLightbox(null)}>关闭</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
