@@ -5,6 +5,8 @@ import { photos } from './photos';
 import { isGateOpen, openGate, resetGate } from './gate';
 import { puzzle } from './puzzle';
 import { isPuzzleOpen, openPuzzle, resetPuzzle } from './puzzleGate';
+import { mystery } from './mystery';
+import { quiz } from './quiz';
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -35,7 +37,7 @@ export default function App() {
   const [gateCode, setGateCode] = useState('');
   const [gateError, setGateError] = useState('');
 
-  const [tab, setTab] = useState<'timeline' | 'gallery' | 'letter' | 'escape'>('timeline');
+  const [tab, setTab] = useState<'timeline' | 'gallery' | 'letter' | 'escape' | 'mystery' | 'quiz'>('timeline');
   const [idx, setIdx] = useState(0);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
@@ -49,6 +51,14 @@ export default function App() {
   const [puzzleCode, setPuzzleCode] = useState('');
   const [puzzleError, setPuzzleError] = useState('');
   const [clueOpen, setClueOpen] = useState<Record<string, boolean>>({});
+
+  const [mysteryOpen, setMysteryOpen] = useState<Record<string, boolean>>({});
+  const [mysteryAnswers, setMysteryAnswers] = useState<Record<string, string>>({});
+  const [mysteryFinal, setMysteryFinal] = useState<string>('');
+
+  const [quizStep, setQuizStep] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const [quizDone, setQuizDone] = useState(false);
 
   const [letter, setLetter] = useState(() => {
     const saved = localStorage.getItem('val_letter');
@@ -262,6 +272,8 @@ export default function App() {
           <button className={`vTab ${tab === 'timeline' ? 'vTabActive' : ''}`} onClick={() => setTab('timeline')}>时间线</button>
           <button className={`vTab ${tab === 'gallery' ? 'vTabActive' : ''}`} onClick={() => setTab('gallery')}>照片墙</button>
           <button className={`vTab ${tab === 'escape' ? 'vTabActive' : ''}`} onClick={() => setTab('escape')}>密室</button>
+          <button className={`vTab ${tab === 'mystery' ? 'vTabActive' : ''}`} onClick={() => setTab('mystery')}>案件</button>
+          <button className={`vTab ${tab === 'quiz' ? 'vTabActive' : ''}`} onClick={() => setTab('quiz')}>测验</button>
           <button className={`vTab ${tab === 'letter' ? 'vTabActive' : ''}`} onClick={() => { setTab('letter'); setRevealed(true); }}>情书</button>
         </nav>
 
@@ -470,6 +482,177 @@ export default function App() {
 
               <div className="vSmall" style={{ marginTop: 12 }}>
                 说明：这个谜题是“轻量密室”，线索都在本页面里；后面我可以把线索改成更私密、更像你们的梗。
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {tab === 'mystery' ? (
+          <section className="vCard">
+            <div className="vCardInner vPuzzle">
+              <h2 className="vPuzzleTitle">{mystery.title}</h2>
+              <div className="vSmall">{mystery.subtitle}</div>
+              <p className="vPuzzleIntro" style={{ whiteSpace: 'pre-wrap' }}>{mystery.intro}</p>
+
+              <div className="vClueList">
+                {mystery.suspects.map((s) => {
+                  const open = !!mysteryOpen[s.id];
+                  const ans = (mysteryAnswers[s.id] ?? '').trim();
+                  const ok = ans !== '' && ans === s.clue.answer;
+                  return (
+                    <div key={s.id} className="vClue">
+                      <div
+                        className="vClueHead"
+                        onClick={() => setMysteryOpen((m) => ({ ...m, [s.id]: !m[s.id] }))}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 99, background: ok ? 'var(--accent2)' : 'var(--accent)', display: 'inline-block' }} />
+                          <span style={{ color: 'var(--ink)' }}>{s.title}</span>
+                        </span>
+                        <span>{open ? '收起' : '展开'}</span>
+                      </div>
+                      {open ? (
+                        <div className="vClueBody">
+                          <div className="vSmall" style={{ marginBottom: 8 }}>{s.note}</div>
+                          <div>{s.clue.prompt}</div>
+                          <div className="vFieldRow">
+                            <input
+                              className="vMiniInput"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              placeholder="输入答案"
+                              value={ans}
+                              onChange={(e) => {
+                                const v = e.target.value.replace(/\s+/g, '').slice(0, 8);
+                                setMysteryAnswers((m) => ({ ...m, [s.id]: v }));
+                              }}
+                            />
+                            <span className="vBadge">{ok ? '✓ 线索成立' : '… 未确认'}</span>
+                          </div>
+                          <div className="vSmall" style={{ marginTop: 8 }}>{s.clue.answerHint}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <div className="vSmall">{mystery.finalQuestion}</div>
+                <div className="vOptions">
+                  {mystery.finalOptions.map((o) => (
+                    <button
+                      key={o.id}
+                      className="vOption"
+                      onClick={() => setMysteryFinal(o.id)}
+                    >
+                      {o.text}
+                    </button>
+                  ))}
+                </div>
+
+                {mysteryFinal ? (
+                  mysteryFinal === mystery.correctOptionId ? (
+                    <div className="vSuccess">
+                      <div className="vSuccessTitle">{mystery.successTitle}</div>
+                      <div className="vSuccessText">{mystery.successText}</div>
+                      <div className="vActions" style={{ marginTop: 10 }}>
+                        <button className="vBtn vBtnPrimary" onClick={() => { setTab('letter'); setRevealed(true); }}>去看情书</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="vGateError">不太对，再想想。提示：真相往往是“太忙”，不是“不爱”。</div>
+                  )
+                ) : null}
+              </div>
+
+              <div className="vSmall" style={{ marginTop: 12 }}>
+                说明：这是一个轻量案件模板。你给我 3 个真实“场景线索”，我可以把问题改成你们独有的版本。
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {tab === 'quiz' ? (
+          <section className="vCard">
+            <div className="vCardInner vPuzzle">
+              <h2 className="vPuzzleTitle">{quiz.title}</h2>
+              <p className="vPuzzleIntro" style={{ whiteSpace: 'pre-wrap' }}>{quiz.intro}</p>
+
+              {!quizDone ? (
+                <>
+                  <div className="vSmall">进度：{quizStep + 1}/{quiz.questions.length}</div>
+                  <div style={{ marginTop: 10, fontSize: 18 }}>{quiz.questions[quizStep].title}</div>
+                  <div className="vOptions">
+                    {quiz.questions[quizStep].options.map((o) => (
+                      <button
+                        key={o.id}
+                        className="vOption"
+                        onClick={() => {
+                          const q = quiz.questions[quizStep];
+                          setQuizAnswers((m) => ({ ...m, [q.id]: o.id }));
+                          if (quizStep >= quiz.questions.length - 1) {
+                            setQuizDone(true);
+                          } else {
+                            setQuizStep((v) => v + 1);
+                          }
+                        }}
+                      >
+                        {o.text}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="vActions" style={{ marginTop: 12 }}>
+                    <button
+                      className="vBtn"
+                      disabled={quizStep === 0}
+                      onClick={() => setQuizStep((v) => clamp(v - 1, 0, quiz.questions.length - 1))}
+                    >
+                      上一题
+                    </button>
+                    <button
+                      className="vBtn"
+                      onClick={() => {
+                        setQuizStep(0);
+                        setQuizAnswers({});
+                        setQuizDone(false);
+                      }}
+                    >
+                      重来
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {(() => {
+                    const score = quiz.questions.reduce((acc, q) => {
+                      const picked = quizAnswers[q.id];
+                      const correct = q.options.find((o) => o.correct)?.id;
+                      return acc + (picked && correct && picked === correct ? 1 : 0);
+                    }, 0);
+                    const pickedResult = [...quiz.result.byScore]
+                      .sort((a, b) => b.min - a.min)
+                      .find((r) => score >= r.min) ?? quiz.result.byScore[0];
+
+                    return (
+                      <div className="vSuccess">
+                        <div className="vSuccessTitle">{quiz.result.title} • {score}/{quiz.questions.length}</div>
+                        <div className="vSuccessText"><b>{pickedResult.title}</b>\n\n{pickedResult.text}</div>
+                        <div className="vActions" style={{ marginTop: 10 }}>
+                          <button className="vBtn vBtnPrimary" onClick={() => { setTab('letter'); setRevealed(true); }}>去看情书</button>
+                          <button className="vBtn" onClick={() => { setQuizStep(0); setQuizAnswers({}); setQuizDone(false); }}>再来一次</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+
+              <div className="vSmall" style={{ marginTop: 12 }}>
+                说明：题目现在是模板（用站内线索）。你给我一些你们的梗/回忆点，我可以把题库改成“只有她能秒答”的那种。
               </div>
             </div>
           </section>
