@@ -179,14 +179,14 @@ export default function App() {
           <div className="vGate">
             <div className="vGatePanel">
               <h1 className="vGateTitle">一个小礼物</h1>
-              <p className="vGateHint">输入 4 位口令后进入。提示：是你的生日。</p>
+              <p className="vGateHint">输入 4 位口令后进入。提示：一个只属于你的日期。</p>
               <div className="vGateRow">
                 <input
                   className="vGateInput"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={4}
-                  placeholder="0814"
+                  placeholder="4 位数字"
                   value={gateCode}
                   onChange={(e) => {
                     setGateCode(e.target.value.replace(/\D/g, '').slice(0, 4));
