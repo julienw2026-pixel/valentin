@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
 import { defaultLetter, moments } from './data';
 import { photos } from './photos';
+import { isGateOpen, openGate, resetGate } from './gate';
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -21,6 +22,16 @@ function useIsMobile() {
 
 export default function App() {
   const isMobile = useIsMobile();
+
+  const [gateOk, setGateOk] = useState(() => {
+    try {
+      return isGateOpen();
+    } catch {
+      return false;
+    }
+  });
+  const [gateCode, setGateCode] = useState('');
+  const [gateError, setGateError] = useState('');
 
   const [tab, setTab] = useState<'timeline' | 'gallery' | 'letter'>('timeline');
   const [idx, setIdx] = useState(0);
@@ -147,6 +158,57 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [lightbox]);
 
+  const submitGate = () => {
+    try {
+      const ok = openGate(gateCode);
+      if (!ok) {
+        setGateError('口令不对，再试一次。');
+        return;
+      }
+      setGateError('');
+      setGateOk(true);
+    } catch {
+      setGateError('无法验证口令（浏览器禁用了本地存储）');
+    }
+  };
+
+  if (!gateOk) {
+    return (
+      <div className="vApp">
+        <div className="vShell">
+          <div className="vGate">
+            <div className="vGatePanel">
+              <h1 className="vGateTitle">一个小礼物</h1>
+              <p className="vGateHint">输入 4 位口令后进入。提示：是你的生日。</p>
+              <div className="vGateRow">
+                <input
+                  className="vGateInput"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  placeholder="0814"
+                  value={gateCode}
+                  onChange={(e) => {
+                    setGateCode(e.target.value.replace(/\D/g, '').slice(0, 4));
+                    setGateError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitGate();
+                  }}
+                />
+                <button className="vBtn vBtnPrimary" onClick={submitGate}>进入</button>
+              </div>
+              {gateError ? <div className="vGateError">{gateError}</div> : null}
+              <div className="vSmall" style={{ marginTop: 12 }}>
+                说明：这是一个轻量口令，只用于防止随手点开/误转发；并非强安全。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="vApp">
       <div className="vShell">
@@ -160,6 +222,9 @@ export default function App() {
             <span className="vPill"><span className="vPillDot" style={{ background: accent }} />结婚 8 年</span>
             <span className="vPill"><span className="vPillDot" style={{ background: 'var(--accent2)' }} />两个小孩：一男一女</span>
             <span className="vPill"><span className="vPillDot" style={{ background: 'var(--ink)' }} />{isMobile ? '手机模式' : '桌面模式'}</span>
+            <button className="vPill" style={{ cursor: 'pointer' }} onClick={() => { resetGate(); setGateOk(false); setGateCode(''); setGateError(''); }}>
+              <span className="vPillDot" style={{ background: 'var(--muted)' }} />锁定
+            </button>
           </div>
         </header>
 
